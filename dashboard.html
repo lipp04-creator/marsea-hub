@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MARSEA Hub — Dashboard</title>
+
+  <!-- Base UI MARSEA -->
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- ChartJS untuk grafik NDWI -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- SIDEBAR SAMA POLA DENGAN map.html -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <img src="assets/Logo.png" alt="Logo MARSEA" class="logo-img">
+      <h2 class="brand-title">
+        <span class="brand-main">MARSEA</span>
+        <span class="brand-sub">Hub</span>
+      </h2>
+    </div>
+    <ul class="sidebar-menu">
+      <li><a href="index.html"> Home</a></li>
+      <li><a href="dashboard.html" class="active"> Dashboard</a></li>
+      <li><a href="map.html"> Map</a></li>
+      <li><a href="services.html"> Services</a></li>
+      <li><a href="mitra.html"> Mitra</a></li>
+      <li><a href="community.html"> Community</a></li>
+      <li><a href="login.html"> Login</a></li>
+      <li><a href="#" onclick="logout && logout()"> Logout</a></li>
+    </ul>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <button id="menuToggle">☰</button>
+      <h1>Operational Dashboard — ALKI 1 &amp; MARSEA Rest Area</h1>
+    </header>
+
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-text">
+        <h2>Operational Dashboard</h2>
+        <p>
+          Ringkasan situasi koridor <strong>ALKI 1</strong> &amp; rest area laut
+          <strong>MARSEA</strong> di sekitar Merak.
+        </p>
+        <div class="hero-cta">
+          <a href="map.html" class="btn-primary">Lihat Map Langsung</a>
+          <a href="services.html" class="btn-secondary">Kelola Layanan MARSEA</a>
+        </div>
+      </div>
+      <div class="hero-image">
+        <div class="hero-image-placeholder">
+          Snapshot realtime akan menampilkan heatmap kapal &amp; status dermaga
+          begitu terhubung ke backend.
+        </div>
+      </div>
+    </section>
+
+    <!-- KPI SECTION -->
+    <section class="card-block">
+      <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <h3>Key Performance Indicators</h3>
+        <span class="muted">Last updated: <span id="lastUpdate">--</span></span>
+      </div>
+
+      <div class="kpi-section">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <h4 id="kpiVessels">--</h4>
+            <p>Active Vessels (ALKI 1)</p>
+          </div>
+          <div class="kpi-card">
+            <h4 id="kpiVesselTypes">--</h4>
+            <p>Dominant Vessel Type</p>
+          </div>
+          <div class="kpi-card">
+            <h4 id="kpiSlots">--</h4>
+            <p>Available Slots (MARSEA)</p>
+          </div>
+          <div class="kpi-card">
+            <h4 id="kpiNdwi">--</h4>
+            <p>Average NDWI (demo)</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHART + UTILISASI -->
+      <div class="grid-2" style="margin-top:10px;">
+        <div class="info-card">
+          <h4>NDWI Trend (6 titik pantau)</h4>
+          <p class="muted" style="font-size:0.85rem;margin-bottom:6px;">
+            Grafik NDWI yang diambil dari <code>ndwi.json</code>.
+          </p>
+          <div class="chart-wrapper">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+        <div class="info-card">
+          <h4>Rest Area Utilization</h4>
+          <p class="muted" style="font-size:0.85rem;margin-bottom:6px;">
+            Menggambarkan seberapa penuh masing-masing dermaga MARSEA berdasarkan
+            kapasitas &amp; slot tersisa.
+          </p>
+          <div id="utilList" class="restarea-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VESSEL TABLE -->
+    <section class="card-block">
+      <div class="section-header">
+        <h3>Vessel Snapshot (Top 10)</h3>
+        <p class="muted">
+          Menampilkan riwayat pemesanan kapal (booking) dari backend MARSEA.
+        </p>
+      </div>
+      <div style="overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nama Kapal</th>
+              <th>Tipe</th>
+              <th>ETA</th>
+              <th>Catatan</th>
+            </tr>
+          </thead>
+          <tbody id="vesselTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <p>© 2025 MARSEA Hub — Prototype Dashboard</p>
+    </footer>
+  </main>
+
+  <!-- SCRIPT GLOBAL (sidebar, konstanta JSON, dll) -->
+  <script src="main.js"></script>
+
+  <!-- ================================================================== -->
+  <!-- ======================== SCRIPT DASHBOARD ========================= -->
+  <!-- ================================================================== -->
+  <script>
+  // NOTE:
+  // main.js sudah mendeklarasi:
+  //   const VESSELS_JSON = "vessels.json";
+  //   const NDWI_JSON    = "ndwi.json";
+  //   const REST_JSON    = "restareas.json";
+  // dan juga setupSidebarToggle()
+  //
+  // Di sini kita TIDAK mendeklarasi ulang variabel-variabel itu.
+
+  // Kalau kamu mau pakai backend booking, set manual di sini:
+  const DASH_API_BASE = "http://localhost:5000";
+
+  let VESSELS  = [];
+  let RESTS    = [];
+  let BOOKINGS = [];
+  let NDWI     = null;
+
+  function typeBadge(type) {
+    const t = (type || '').toLowerCase();
+    if (t === 'passenger')   return '<span class="badge badge-passenger">Passenger</span>';
+    if (t === 'logistics')   return '<span class="badge badge-logistics">Logistics</span>';
+    if (t === 'tanker')      return '<span class="badge badge-tanker">Tanker</span>';
+    if (t === 'operational') return '<span class="badge badge-operational">Operational</span>';
+    return `<span class="badge">${type || '-'}</span>`;
+  }
+
+  async function loadData() {
+    try {
+      const [vesselRes, restRes, ndwiRes] = await Promise.all([
+        fetch(VESSELS_JSON),                         // dari main.js
+        fetch(`${DASH_API_BASE}/api/restareas/utilization`),
+        fetch(NDWI_JSON)                             // dari main.js
+      ]);
+
+      VESSELS = vesselRes.ok ? await vesselRes.json() : [];
+      RESTS   = restRes.ok   ? await restRes.json()   : [];
+      NDWI    = ndwiRes.ok   ? await ndwiRes.json()   : { values:[0.75] };
+    } catch (err) {
+      console.error("loadData error:", err);
+    }
+  }
+
+  async function loadBookings() {
+    try {
+      const res = await fetch(`${DASH_API_BASE}/api/restareas/bookings`);
+      BOOKINGS  = res.ok ? await res.json() : [];
+    } catch (err) {
+      console.warn("loadBookings gagal, pakai fallback:", err);
+      BOOKINGS = [];
+    }
+  }
+
+  function refreshKPIs() {
+    const elV = document.getElementById("kpiVessels");
+    const elT = document.getElementById("kpiVesselTypes");
+    const elS = document.getElementById("kpiSlots");
+    const elN = document.getElementById("kpiNdwi");
+    const elU = document.getElementById("lastUpdate");
+
+    if (elU) elU.textContent = new Date().toLocaleString("id-ID",{hour12:false});
+
+    // 1. Active vessels
+    elV.textContent = Array.isArray(VESSELS) ? VESSELS.length : 0;
+
+    // 2. Dominant type
+    const counter = {};
+    VESSELS.forEach(v => {
+      const key = v.type || "Other";
+      counter[key] = (counter[key] || 0) + 1;
+    });
+    const sorted = Object.entries(counter).sort((a,b)=>b[1]-a[1]);
+    elT.textContent = sorted.length ? `${sorted[0][0]} (${sorted[0][1]})` : "--";
+
+    // 3. Available slots = Σ(capacity - used)
+    let totalAvail = 0;
+    RESTS.forEach(r => {
+      const cap  = Number(r.capacity ?? 0);
+      const used = Number(r.used ?? 0);
+      totalAvail += Math.max(cap - used, 0);
+    });
+    elS.textContent = totalAvail;
+
+    // 4. NDWI last value
+    const last = NDWI && Array.isArray(NDWI.values) && NDWI.values.length
+      ? Number(NDWI.values[NDWI.values.length - 1])
+      : null;
+    elN.textContent = Number.isFinite(last) ? last.toFixed(2) : "0.75";
+  }
+
+  function renderUtilList() {
+    const root = document.getElementById("utilList");
+    if (!root) return;
+    root.innerHTML = "";
+
+    RESTS.forEach(r => {
+      const cap  = Number(r.capacity ?? 0);
+      const used = Number(r.used ?? 0);
+      const util = cap ? Math.round((used/cap)*100) : 0;
+
+      const div = document.createElement("div");
+      div.className = "restarea-item";
+      div.innerHTML = `
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:0.9rem;">${r.name || r.id}</div>
+          <div class="muted" style="font-size:0.78rem;margin-top:2px;">
+            ${used}/${cap} slots terpakai
+          </div>
+          <div class="bar" style="margin-top:4px;width:100%;background:#eaf6fb;">
+            <span style="width:${util}%;display:block;height:8px;border-radius:999px;background:linear-gradient(90deg,#1f9fcf,#ffd36b);"></span>
+          </div>
+        </div>
+        <div style="margin-left:8px;font-weight:700;font-size:0.9rem;">${util}%</div>
+      `;
+      root.appendChild(div);
+    });
+  }
+
+  function renderVesselTable() {
+    const tbody = document.getElementById("vesselTable");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    const list = BOOKINGS.length ? BOOKINGS.slice(0,10) : VESSELS.slice(0,10);
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="5">Belum ada data kapal.</td></tr>`;
+      return;
+    }
+
+    list.forEach(b => {
+      const tr = document.createElement("tr");
+      if (b.vessel_name) {
+        const d = b.created_at ? new Date(b.created_at) : null;
+        const note = d
+          ? `Rest Area ${b.rest_area_id} — ${b.status || "pending"} — ${d.toLocaleString("id-ID",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}`
+          : `Rest Area ${b.rest_area_id} — ${b.status || "pending"}`;
+        tr.innerHTML = `
+          <td>${b.id}</td>
+          <td>${b.vessel_name}</td>
+          <td>${typeBadge(b.vessel_type)}</td>
+          <td>${b.eta || "-"}</td>
+          <td>${note}</td>
+        `;
+      } else {
+        const note = b.eta ? `ETA ${b.eta} — ALKI 1` : "—";
+        tr.innerHTML = `
+          <td>${b.id}</td>
+          <td>${b.name}</td>
+          <td>${typeBadge(b.type)}</td>
+          <td>${b.eta || "-"}</td>
+          <td>${note}</td>
+        `;
+      }
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderChart() {
+    const canvas = document.getElementById("trendChart");
+    if (!canvas || typeof Chart === "undefined") return;
+
+    const ctx = canvas.getContext("2d");
+
+    let labels = ["P1","P2","P3","P4","P5","P6"];
+    let values = [0.72, 0.74, 0.71, 0.76, 0.73, 0.75];
+
+    if (NDWI && Array.isArray(NDWI.weeks) && Array.isArray(NDWI.values) && NDWI.values.length) {
+      labels = NDWI.weeks;
+      values = NDWI.values;
+    }
+
+    new Chart(ctx,{
+      type:"line",
+      data:{
+        labels,
+        datasets:[{
+          label:"NDWI",
+          data:values,
+          borderWidth:2,
+          fill:true,
+          tension:0.35
+        }]
+      },
+      options:{
+        plugins:{ legend:{ display:false } },
+        scales:{
+          y:{ min:0.5,max:0.9,ticks:{ stepSize:0.1 } },
+          x:{ grid:{ display:false } }
+        }
+      }
+    });
+  }
+
+  (async function initDashboard(){
+    await loadData();
+    await loadBookings();
+    refreshKPIs();
+    renderUtilList();
+    renderVesselTable();
+    renderChart();
+  })();
+  </script>
+</body>
+</html>
